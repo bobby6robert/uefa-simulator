@@ -1,11 +1,11 @@
 from flask import Flask, jsonify
 import requests
+from bs4 import BeautifulSoup
 import os
 
 app = Flask(__name__)
 
-# Oficjalne API Ekstraklasy
-API_URL = "https://api.ekstraklasa.org/tables"
+EKSTRAKLASA_URL = "https://www.ekstraklasa.org/tabela"
 
 @app.route("/")
 def home():
@@ -14,20 +14,29 @@ def home():
 @app.route("/polska")
 def polska():
     try:
-        r = requests.get(API_URL, timeout=10)
-        r.raise_for_status()  # wyrzuci błąd, jeśli status != 200
-        data = r.json()
+        r = requests.get(EKSTRAKLASA_URL, timeout=10)
+        r.raise_for_status()
     except Exception as e:
-        return jsonify({"error": "Nie udało się pobrać danych z Ekstraklasy", "details": str(e)}), 500
+        return jsonify({"error": "Nie udało się pobrać strony Ekstraklasy", "details": str(e)}), 500
 
+    soup = BeautifulSoup(r.text, "html.parser")
     table_data = []
-    # Iterujemy po drużynach w tabeli
-    for team in data["leagueTable"]["teams"]:
-        table_data.append({
-            "position": team.get("position"),
-            "team": team.get("teamName"),
-            "points": team.get("points")
-        })
+
+    # Pobieramy drużyny z tabeli
+    rows = soup.select("div.table__row")  # <div> zamiast <tr> – bo strona używa divów
+    for row in rows:
+        pos = row.select_one("div.table__cell--position")
+        team = row.select_one("div.table__cell--team-name")  # poprawiona klasa
+        pts = row.select_one("div.table__cell--points")
+        if pos and team and pts:
+            try:
+                table_data.append({
+                    "position": int(pos.text.strip()),
+                    "team": team.text.strip(),
+                    "points": int(pts.text.strip())
+                })
+            except:
+                continue  # jeśli konwersja do int się nie uda
 
     return jsonify({
         "league": "Ekstraklasa",
