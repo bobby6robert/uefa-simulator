@@ -18,15 +18,16 @@ def polska():
     table_data = []
 
     # To przykład, trzeba dopasować selektory do strony ekstraklasy
-    rows = soup.select("table.league-table tbody tr")  # <- sprawdzić HTML
-    for row in rows:
-        position = row.select_one("td.position").text.strip()
-        team = row.select_one("td.team").text.strip()
-        points = row.select_one("td.points").text.strip()
+    rows = soup.select("tr.table__row")  # wszystkie wiersze tabeli
+for row in rows:
+    pos = row.select_one("td.table__cell--position")
+    team = row.select_one("td.table__cell--team")
+    pts = row.select_one("td.table__cell--points")
+    if pos and team and pts:
         table_data.append({
-            "position": int(position),
-            "team": team,
-            "points": int(points)
+            "position": int(pos.text.strip()),
+            "team": team.text.strip(),
+            "points": int(pts.text.strip())
         })
 
     return jsonify({
