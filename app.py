@@ -1,6 +1,7 @@
 from flask import Flask, jsonify
 import requests
 from bs4 import BeautifulSoup
+import os
 
 app = Flask(__name__)
 
@@ -12,35 +13,22 @@ def home():
 
 @app.route("/polska")
 def polska():
-    try:
-        r = requests.get(EKSTRAKLASA_URL, timeout=10)
-        r.raise_for_status()  # sprawdza, czy status 200 OK
-    except requests.RequestException as e:
-        return jsonify({"error": "Nie udało się pobrać danych", "details": str(e)}), 500
-
+    r = requests.get(EKSTRAKLASA_URL)
     soup = BeautifulSoup(r.text, "html.parser")
+
     table_data = []
 
-    # Pobieramy wszystkie wiersze tabeli
     rows = soup.select("tr.table__row")
     for row in rows:
         pos = row.select_one("td.table__cell--position")
         team = row.select_one("td.table__cell--team")
         pts = row.select_one("td.table__cell--points")
-        
-        # Pomijamy wiersze bez danych
-        if not pos or not team or not pts:
-            continue
-
-        try:
+        if pos and team and pts:
             table_data.append({
-                "position": int(pos.get_text(strip=True)),
-                "team": team.get_text(strip=True),
-                "points": int(pts.get_text(strip=True))
+                "position": int(pos.text.strip()),
+                "team": team.text.strip(),
+                "points": int(pts.text.strip())
             })
-        except ValueError:
-            # jeśli nie da się zamienić na int, pomijamy wiersz
-            continue
 
     return jsonify({
         "league": "Ekstraklasa",
@@ -48,4 +36,5 @@ def polska():
     })
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
