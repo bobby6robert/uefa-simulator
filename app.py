@@ -5,43 +5,61 @@ import os
 
 app = Flask(__name__)
 
-EKSTRAKLASA_URL = "https://www.ekstraklasa.org/tabela"
+# Słownik suffixów WorldFootball dla wszystkich 55 nacji (przykładowa lista - uzupełnij o resztę wg wzoru)
+LEAGUES = {
+    "england": ("eng-premier-league", "j-w"),
+    "poland": ("pol-ekstraklasa", "j-w"),
+    "germany": ("bundesliga", "j-w"),
+    "italy": ("ita-serie-a", "j-w"),
+    "france": ("fra-ligue-1", "j-w"),
+    "norway": ("nor-eliteserien", "w-j"),
+    "turkey": ("tur-sueper-lig", "j-w"),
+    "denmark": ("den-superliga", "j-w")
+}
 
 @app.route("/")
 def home():
-    return "UEFA Simulator działa 🚀"
+    # Strona główna z listą klikalnych linków
+    links = "".join([f'<li><a href="/tabela/{k}">{k.capitalize()}</a></li>' for k in LEAGUES.keys()])
+    return f"<h1>UEFA Simulator API 🚀</h1><p>Wybierz ligę:</p><ul>{links}</ul>"
 
-@app.route("/polska")
-def polska():
+@app.route("/tabela/<country>")
+def get_table(country):
+    country = country.lower()
+    if country not in LEAGUES:
+        return jsonify({"error": f"Kraj '{country}' nie jest obsługiwany. Sprawdź listę na stronie głównej."}), 404
+
+    suffix, l_type = LEAGUES[country]
+    year = "2025-2026" if l_type == "j-w" else "2025"
+    url = f"https://www.worldfootball.net/competition/{suffix}-{year}/"
+
     try:
-        r = requests.get(EKSTRAKLASA_URL, timeout=10)
-        r.raise_for_status()
-    except Exception as e:
-        return jsonify({"error": "Nie udało się pobrać strony Ekstraklasy", "details": str(e)}), 500
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(r.text, "html.parser")
+        
+        table = soup.find("table", class_="standard_tabelle")
+        if not table:
+            return jsonify({"error": "Nie znaleziono tabeli na stronie źródłowej"}), 500
 
-    soup = BeautifulSoup(r.text, "html.parser")
-    table_data = []
-
-    # Pobieramy drużyny z tabeli
-    rows = soup.select("div.table__row")  # <div> zamiast <tr> – bo strona używa divów
-    for row in rows:
-        pos = row.select_one("div.table__cell--position")
-        team = row.select_one("div.table__cell--team-name")  # poprawiona klasa
-        pts = row.select_one("div.table__cell--points")
-        if pos and team and pts:
-            try:
-                table_data.append({
-                    "position": int(pos.text.strip()),
-                    "team": team.text.strip(),
-                    "points": int(pts.text.strip())
+        results = []
+        for row in table.find_all("tr")[1:]: # Pomijamy nagłówek
+            cols = row.find_all("td")
+            if len(cols) >= 10:
+                results.append({
+                    "pos": cols[0].text.strip().replace(".", ""),
+                    "team": cols[2].text.strip(),
+                    "pts": cols[9].text.strip()
                 })
-            except:
-                continue  # jeśli konwersja do int się nie uda
+        
+        return jsonify({
+            "league": country.capitalize(),
+            "season": year,
+            "data": results
+        })
 
-    return jsonify({
-        "league": "Ekstraklasa",
-        "table": table_data
-    })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
